@@ -2,8 +2,7 @@ FileCrawler
 ===========
 
 Variety of file/directory crawling functions such as:
-  Enumerate and count all file types in a given directory
-  Line count
-  Regex search
-  Restrict to specific file ext
-  etc
+  1. Enumerate and count all file types in a given directory
+  2. Line count
+  3. Regex search
+  4. Restrict to specific file ext
