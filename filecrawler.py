@@ -29,7 +29,7 @@ extlist=[]
 
 def main():
     global term, tosearch, type, rec, verbose, extfilter, pr, case, outfile, linecount, typecount, errorhandling
-	
+    
     if args.directory != None:
         tosearch = args.directory
         type = 'd'
@@ -58,152 +58,154 @@ def main():
     outfile = args.output
 
     if (((type != None) and (tosearch != None)) or linecount or typecount):
-		if errorhandling:
-			start()
-		else:
-			try:
-				start()
-			except:
-				printline('[!] An error ocurred:\n')
-				for e in sys.exc_info():
-					printline(e)
-				printline('[*] Note that this script may break on some filetypes when run with 3.4. Please use 2.7')
+        if errorhandling:
+            start()
+        else:
+            try:
+                start()
+            except:
+                printline('[!] An error ocurred:\n')
+                for e in sys.exc_info():
+                    printline(e)
+                printline('[*] Note that this script may break on some filetypes when run with 3.4. Please use 2.7')
     elif help != 1:
-			print('USAGE:\tfilecrawler.py [-h, -r, -v, -p, -c, -t, -z, -l, -e <extension(s)>, -o <filename>, -s <searchterm>] -d|-f <directory|filename>')
-			
+            print('USAGE:\tfilecrawler.py [-h, -r, -v, -p, -c, -t, -z, -l, -e <extension(s)>, -o <filename>, -s <searchterm>] -d|-f <directory|filename>')
+            
 def start():
-	global term, term, tosearch, rec, linecount, typecount, types, extfilter, outfile
-	
-	if outfile != None:
-		with open(outfile, 'w') as f:
-				f.write("")	
-	
-	#Print intro messages
-	printline('\n\t\t --TODO--\n')
-	if type == 'd' and rec:
-		printline('[*] Recursively running against directory:\n\t%s' % tosearch)
-	elif type == 'd' and not rec:
-		printline('[*] Non-recursively running against directory:\n\t%s' % tosearch)
-	elif type == 'f':
-		printline('[*] Running against file:\n\t%s' % tosearch)
-	if term != None:
-		printline('[*] Searching for:\n\t%s' % term)
-	if linecount:
-		printline('[*] Performing line count')
-	if typecount and extfilter == None:
-		printline('[*] Enumerating all found file types')
-	if extfilter != None:
-		printline('[*] Filtering against the following file extensions:')
-		for e in extfilter:
-			printline('\t%s' % e)
-	if outfile != None:
-		printline('[*] Output written to file:\n\t%s' % outfile)		
-		
-	#Determine appropriate search
-	printline('\n\t\t--RESULTS--\n')
-	if type == 'd':
-		parsedirectory(tosearch)
-	elif type == 'f':
-		searchfile(tosearch)
-	
-	#Print appropriate results
-	if term != None:
-		printline('[*] Search complete. %s lines searched across %s files with %s occurrences found.' % (prettynumbers(lcount), prettynumbers(fcount), prettynumbers(rcount)))
-	if linecount:
-		printline('[*] %s lines parsed across %s files' % (prettynumbers(lcount), prettynumbers(fcount)))
-	if typecount:
-		if extfilter:
-			printline('[*] Number of occurrences of filtered file extensions:')
-		else:
-			printline('[*] %s file types were discovered:' % prettynumbers(len(extlist)))
-		extlist.sort(key=itemgetter(0))
-		for e in extlist:
-			printline('\t%s %s' % (e[0].ljust(18), prettynumbers(e[1]).ljust(8)))
+    global term, term, tosearch, rec, linecount, typecount, types, extfilter, outfile
+    
+    if outfile != None:
+        with open(outfile, 'w') as f:
+                f.write("") 
+    
+    #Print intro messages
+    printline('\n\t\t --TODO--\n')
+    if type == 'd' and rec:
+        printline('[*] Recursively running against directory:\n\t%s' % tosearch)
+    elif type == 'd' and not rec:
+        printline('[*] Non-recursively running against directory:\n\t%s' % tosearch)
+    elif type == 'f':
+        printline('[*] Running against file:\n\t%s' % tosearch)
+    if term != None:
+        printline('[*] Searching for:\n\t%s' % term)
+    if linecount:
+        printline('[*] Performing line count')
+    if typecount and extfilter == None:
+        printline('[*] Enumerating all found file types')
+    if extfilter != None:
+        printline('[*] Filtering against the following file extensions:')
+        for e in extfilter:
+            printline('\t%s' % e)
+    if outfile != None:
+        printline('[*] Output written to file:\n\t%s' % outfile)        
+        
+    #Determine appropriate search
+    printline('\n\t\t--RESULTS--\n')
+    if type == 'd':
+        parsedirectory(tosearch)
+    elif type == 'f':
+        searchfile(tosearch)
+    
+    #Print appropriate results
+    if term != None:
+        printline('[*] Search complete. %s lines searched across %s files with %s occurrences found.' % (prettynumbers(lcount), prettynumbers(fcount), prettynumbers(rcount)))
+    if linecount:
+        printline('[*] %s lines parsed across %s files' % (prettynumbers(lcount), prettynumbers(fcount)))
+    if typecount:
+        if extfilter:
+            printline('[*] Number of occurrences of filtered file extensions:')
+        else:
+            printline('[*] %s file types were discovered:' % prettynumbers(len(extlist)))
+        extlist.sort(key=itemgetter(0))
+        for e in extlist:
+            printline('\t%s %s' % (e[0].ljust(18), prettynumbers(e[1]).ljust(8)))
 
-		
+        
 def searchfile(file):
-	global term, pr, tosearch, rcount, fcount, lcount
-	count = 1
-	fcount+=1
-	mObj=None
-	vprint('[?] Searching %s for %s' % (file, term))
-	
-	f = open(file)
-	for line in f.readlines():
-		lcount+=1
-		if case and term:
-			mObj = re.search(term, line, flags=0)
-		elif term:
-			mObj = re.search(term, line, flags=re.IGNORECASE)
+    global term, pr, tosearch, rcount, fcount, lcount
+    count = 1
+    fcount+=1
+    mObj=None
+    vprint('[?] Searching %s for %s' % (file, term))
+    
+    f = open(file)
+    for line in f.readlines():
+        lcount+=1
+        if case and term:
+            mObj = re.search(term, line, flags=0)
+        elif term:
+            mObj = re.search(term, line, flags=re.IGNORECASE)
 
-		if mObj:
-			printline('[*] Line %d in file %s' % (count, file[len(tosearch):]))
-			rcount+=1
-			if pr:
-				if len(line)>200:
-					printline(line.strip(' \t\r\n')[:200] + "...\n")
-				else:
-					printline(line.strip(' \t\r\n') + "\n")
-		count+=1
-	vprint('[?] Number of lines: %d' % count)
-	
+        if mObj:
+            printline('[*] Line %d in file %s' % (count, file[len(tosearch):]))
+            rcount+=1
+            if pr:
+                if len(line)>200:
+                    printline(line.strip(' \t\r\n')[:200] + "...\n")
+                else:
+                    printline(line.strip(' \t\r\n') + "\n")
+        count+=1
+    vprint('[?] Number of lines: %d' % count)
+    
 def searchfiles(files, dir):
-	global extfilter, typelist, term
-	found = False
-	vprint('[?] Searching file list')
-	
-	for file in files:
-		fext = path.splitext(file)[1]	
-		if len(fext) < 1:
-			fext = 'no ext'
-			
-		if typecount and (extfilter == None or fext in extfilter):
-			for e in extlist:
-				if e[0] == fext:
-					found = True
-					e[1] += 1
-			if not found:
-				extlist.append([fext, 1])
+    global extfilter, typelist, term
+    found = False
+    vprint('[?] Searching file list')
+    
+    for file in files:
+        vprint('[?] Parsing file:\t%s'%file)
+        fext = path.splitext(file)[1]   
+        if len(fext) < 1:
+            fext = 'no ext'
+            
+        if typecount and (extfilter == None or fext in extfilter):
+            found = False
+            for e in extlist:
+                if e[0] == fext:
+                    found = True
+                    e[1] += 1
+            if not found:
+                extlist.append([fext, 1])
 
-		if (term != None or linecount) and (extfilter == None or (extfilter != None and fext in extfilter)):
-			searchfile(dir+'/'+file)
+        if (term != None or linecount) and (extfilter == None or (extfilter != None and fext in extfilter)):
+            searchfile(dir+'/'+file)
 
 def parsedirectory(dir):
-	global rec
-	flist = []
-	dlist = []
-	
-	vprint('[?] Parsing %s' % dir)
-	
-	for (dirpath, dirname, filenames) in walk(dir):
-		flist.extend(filenames)
-		dlist.extend(dirname)
-		break
-		
-	vprint('[?] Files found:')
-	vprint(flist)
-	vprint('[?] Directories found:')
-	vprint(dlist)
+    global rec
+    flist = []
+    dlist = []
+    
+    vprint('[?] Parsing %s' % dir)
+    
+    for (dirpath, dirname, filenames) in walk(dir):
+        flist.extend(filenames)
+        dlist.extend(dirname)
+        break
+        
+    vprint('[?] Files found:')
+    vprint(flist)
+    vprint('[?] Directories found:')
+    vprint(dlist)
 
-	searchfiles(flist, dir)
-	
-	if (rec) & (dlist != []):
-		for d in dlist:
-			parsedirectory(dir+'/'+d)
-			
+    searchfiles(flist, dir)
+    
+    if (rec) & (dlist != []):
+        for d in dlist:
+            parsedirectory(dir+'/'+d)
+            
 def vprint(str):
-	global verbose
-	if verbose:
-		printline(str)
+    global verbose
+    if verbose:
+        printline(str)
 
-def printline(str):
-	print(str)
-	if outfile != None:
-		with open(outfile, 'a') as f:
-			f.write(str+"\n")
-			
+def printline(s):
+    print(s)
+    if outfile != None:
+        with open(outfile, 'a') as f:
+            f.write(str(s)+"\n")
+            
 def prettynumbers(str):
-	return "{:,}".format(str)
-	
+    return "{:,}".format(str)
+    
 if __name__ == "__main__":
-	main()
+    main()
