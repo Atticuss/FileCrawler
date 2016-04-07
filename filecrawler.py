@@ -108,12 +108,13 @@ def start():
 	elif type == 'f':
 		searchfile(tosearch)
 	
+	for i in extlist.keys():
+			loc += extlist.get(i)[1]
+
 	#Print appropriate results
 	if term != None:
-		printline('\n[*] Search complete. %s lines searched across %s files with %s occurrences found.' % (prettynumbers(lcount), prettynumbers(fcount), prettynumbers(rcount)))
+		printline('\n[*] Search complete. %s lines searched across %s files with %s occurrences found.' % (prettynumbers(loc), prettynumbers(fcount), prettynumbers(rcount)))
 	if linecount:
-		for i in extlist.keys():
-			loc += extlist.get(i)[1]
 		printline('[*] %s lines parsed across %s files' % (prettynumbers(loc), prettynumbers(fcount)))
 	if len(lockedfiles) > 0:
 		printline('\n[!] Unable to open the following files:')
