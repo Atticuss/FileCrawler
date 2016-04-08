@@ -23,9 +23,10 @@ parser.add_argument("-t", "--filetypecount", action='store_true', help="print al
 parser.add_argument("-z", "--disableerrorhandling", action='store_true', help="disable error handling to see full stack traces on errors")
 args = parser.parse_args()
 
-rec = verbose = pr = case = fcount = rcount = lcount = typecount = linecount = errorhandling = 0
+rec = verbose = pr = case = fcount = rcount = typecount = linecount = errorhandling = 0
 term = tosearch = type = extfilter = outfile = None
-extlist=[]
+# extlist = {extension: [fcount, lcount]}
+extlist={}
 lockedfiles=[]
 
 def main():
@@ -74,7 +75,7 @@ def main():
 			
 def start():
 	global term, term, tosearch, rec, linecount, typecount, types, extfilter, outfile, lockedfiles
-	
+	loc = 0
 	if outfile != None:
 		with open(outfile, 'w') as f:
 				f.write("") 
@@ -107,11 +108,14 @@ def start():
 	elif type == 'f':
 		searchfile(tosearch)
 	
+	for i in extlist.keys():
+			loc += extlist.get(i)[1]
+
 	#Print appropriate results
 	if term != None:
-		printline('\n[*] Search complete. %s lines searched across %s files with %s occurrences found.' % (prettynumbers(lcount), prettynumbers(fcount), prettynumbers(rcount)))
+		printline('\n[*] Search complete. %s lines searched across %s files with %s occurrences found.' % (prettynumbers(loc), prettynumbers(fcount), prettynumbers(rcount)))
 	if linecount:
-		printline('[*] %s lines parsed across %s files' % (prettynumbers(lcount), prettynumbers(fcount)))
+		printline('[*] %s lines parsed across %s files' % (prettynumbers(loc), prettynumbers(fcount)))
 	if len(lockedfiles) > 0:
 		printline('\n[!] Unable to open the following files:')
 		for f in lockedfiles:
@@ -122,22 +126,32 @@ def start():
 			printline('[*] Number of occurrences of filtered file extensions:')
 		else:
 			printline('[*] %s file types were discovered:' % prettynumbers(len(extlist)))
-		extlist.sort(key=itemgetter(0))
-		for e in extlist:
-			printline('\t%s %s' % (e[0].ljust(18), prettynumbers(e[1]).ljust(8)))
+		
+		sorted_extlist = extlist.keys()
+		sorted_extlist.sort()
+
+		if linecount:
+			printline('\t%s %s %s' % ("Type".ljust(18), "Count".ljust(8), "LoC".ljust(8)))
+			for e in sorted_extlist:
+				printline('\t%s %s %s' % (e.ljust(18), prettynumbers(extlist.get(e)[0]).ljust(8), prettynumbers(extlist.get(e)[1]).ljust(8)))
+		else:
+			printline('\t%s %s' % ("Type".ljust(18), "Count".ljust(8)))
+			for e in sorted_extlist:
+				printline('\t%s %s' % (e.ljust(18), prettynumbers(extlist.get(e)[0]).ljust(8)))
 
 		
-def searchfile(file):
-	global term, pr, tosearch, rcount, fcount, lcount, lockedfiles
+def searchfile(file, fext):
+	global term, pr, tosearch, rcount, fcount, lockedfiles, extlist
 	count = 1
 	fcount+=1
 	mObj=None
+	lcount = extlist.get(fext, [1,0])
 	vprint('[?] Searching %s for %s' % (file, term))
 	
 	try:
 		with open(file,'r') as f:
 			for line in f:
-				lcount+=1
+				lcount[1]+=1
 				if case and term:
 					mObj = re.search(term, line, flags=0)
 				elif term:
@@ -156,6 +170,7 @@ def searchfile(file):
 		lockedfiles.append(file)
 		vprint('[?] IOError thrown opening: %s'%file)
 	
+	extlist[fext] = lcount
 	vprint('[?] Number of lines: %d' % count)
 	
 def searchfiles(files, dir):
@@ -170,16 +185,14 @@ def searchfiles(files, dir):
 			fext = 'no ext'
 			
 		if typecount and (extfilter == None or fext in extfilter):
-			found = False
-			for e in extlist:
-				if e[0] == fext:
-					found = True
-					e[1] += 1
-			if not found:
-				extlist.append([fext, 1])
+			if fext in extlist.keys():
+				inc = extlist.get(fext)
+				extlist[fext] = [inc[0]+1, inc[1]]
+			else:
+				extlist[fext] = [1,0]
 
 		if (term != None or linecount) and (extfilter == None or (extfilter != None and fext in extfilter)):
-			searchfile(dir+'/'+file)
+			searchfile(dir+'/'+file, fext)
 
 def parsedirectory(dir):
 	global rec
