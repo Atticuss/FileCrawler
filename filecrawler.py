@@ -1,235 +1,313 @@
 #! python2
 
 from os import walk, path
-from operator import itemgetter
-import sys, getopt, re, argparse
+import sys
+import re
+import argparse
+import binascii
 
 
+class FileCrawler:
 
-parser = argparse.ArgumentParser(description='Do stuff with files.', prog='Filecrawler.py', usage='%(prog)s [-h, -r, -v, -p, -c, -t, -z, -e <extension(s)>, -o <filename>] -s|-l [<searchterm>] -d|-f <directory|filename>', \
-	formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=65, width =150))
-group = parser.add_mutually_exclusive_group(required=True)
-parser.add_argument("-r", "--recursive", action='store_false', help="Do not recursively search all files in the given directory")
-parser.add_argument("-v", "--verbose", action='store_true', help="Turn on (extremely) verbose mode")
-parser.add_argument("-e", "--extension", nargs='?', default=None, help="filetype(s) to restrict search to. seperate lists via commas with no spaces")
-parser.add_argument("-l", "--linecount", action='store_true', help="only perform a linecount. restrict filetypes via the -e flag. may override the -s flag.")
-parser.add_argument("-p", "--printout", action='store_true', help="print the lines found containing search term")
-parser.add_argument("-c", "--casesensitive", action="store_true", help="make search case sensitive")
-parser.add_argument("-o", "--output", nargs='?', default=None, help="specify output file. NOTE: will overwrite file if it currently exists")
-group.add_argument("-d", "--directory", default=None, help="directory to search")
-group.add_argument("-f", "--file", default=None, help="file to search")
-parser.add_argument("-s", "--search", default=None, help="term to search for; regex is accepted")
-parser.add_argument("-t", "--filetypecount", action='store_true', help="print all file types found with the number of occurrences")
-parser.add_argument("-z", "--disableerrorhandling", action='store_true', help="disable error handling to see full stack traces on errors")
-args = parser.parse_args()
+    def __init__(self):
+        # self.file_stats = {extension: (typecount, number of lines)}
+        self.fcount = 0
+        self.rcount = 0
+        self.lcount = 0
+        self.file_stats = {}
+        self.lockedfiles = []
+        self.magic_numbers = {
+            "tarz": b'1F9D',
+            "tar": b'1FA0',
+            "bz2": b'425A68',
+            "DOS-exe": b'4D5A',
+            "zip": b'504B0304',
+            'rar': b'526172211A0700',
+            'rar5': b'526172211A070100',
+            'elf': b'7F454C46',
+            'png': b'89504E470D0A1A0A',
+            'pdf': b'25504446',
+            'ms-office': b'D0CF11E0A1B11AE1',
+            'dmg': b'7801730D626260',
+            '7z': b'377ABCAF271C',
+            'gz': b'1F8B',
+            'xml': b'3C3F786D6C20'
+        }
+        parser = argparse.ArgumentParser(description='Do stuff with files.',
+                                         prog='Filecrawler.py',
+                                         usage=('%(prog)s [-h, -r, -v, -p, -c, -t, -z,'
+                                                ' -e <extension(s)>, -o <filename>]'
+                                                ' -s|-l [<searchterm>]'
+                                                ' -d|-f <directory|filename>'),
+                                         formatter_class=(lambda prog:
+                                                          argparse.HelpFormatter(prog,
+                                                                                 max_help_position=65,
+                                                                                 width=150)))
+        group = parser.add_mutually_exclusive_group(required=True)
+        parser.add_argument("-r", "--recursive", action='store_false',
+                            help="Do not recursively search all files in the given directory")
+        parser.add_argument("-v", "--verbose", action='store_true',
+                            help="Turn on (extremely) verbose mode")
+        parser.add_argument("-e", "--extension", nargs='?', default=None,
+                            help="filetype(s) to restrict search to. seperate lists"
+                            " via commas with no spaces")
+        parser.add_argument("-l", "--linecount", action='store_true',
+                            help="only perform a self.linecount. restrict filetypes"
+                            " via the -e flag. may override the -s flag.")
+        parser.add_argument("-p", "--printout", action='store_true',
+                            help="print the lines found containing search self.term")
+        parser.add_argument("-c", "--casesensitive",
+                            action="store_true", help="make search case sensitive")
+        parser.add_argument("-o", "--output", nargs='?', default=None,
+                            help="specify output file. NOTE: will overwrite file if"
+                            " it currently exists")
+        group.add_argument("-d", "--directory", default=None,
+                           help="directory to search")
+        group.add_argument("-f", "--file", default=None, help="file to search")
+        parser.add_argument("-s", "--search", default=None,
+                            help="term to search for; regex is accepted")
+        parser.add_argument("-t", "--filetypecount", action='store_true',
+                            help="print all file types found with the number of occurrences")
+        parser.add_argument("-z", "--disableerrorhandling", action='store_true',
+                            help="disable error handling to see full stack traces on errors")
+        args = parser.parse_args()
 
-rec = verbose = pr = case = fcount = rcount = typecount = linecount = errorhandling = 0
-term = tosearch = type = extfilter = outfile = None
-# extlist = {extension: [fcount, lcount]}
-extlist={}
-lockedfiles=[]
+        # Process arguments
+        if args.directory is not None:
+            self.tosearch = args.directory
+            self.i_type = 'd'
 
-def main():
-	global term, tosearch, type, rec, verbose, extfilter, pr, case, outfile, linecount, typecount, errorhandling
-	
-	if args.directory != None:
-		tosearch = args.directory
-		type = 'd'
+        elif args.file is not None:
+            self.tosearch = args.file
+            self.i_type = 'f'
 
-	elif args.file != None:
-		tosearch = args.file
-		type = 'f'
-			
-	if args.extension != None:
-		extfilter = args.extension.split(',')
-		for i,e in enumerate(extfilter):
-			if e[0] != '.':
-				extfilter[i] = '.'+e
+        if args.extension is not None:
+            self.extfilter = args.extension.split(',')
+            for i, e in enumerate(self.extfilter):
+                if e[0] != '.':
+                    self.extfilter[i] = '.' + e
+        else:
+            self.extfilter = None
+        self.rec = args.recursive
+        self.verbose = args.verbose
+        self.case = args.casesensitive
+        self.print_out = 0
 
-	rec = args.recursive
-	verbose = args.verbose
-	case = args.casesensitive
+        if args.printout:
+            self.print_out = 1
 
-	if args.printout:
-		pr = 1
+        self.linecount = args.linecount
+        self.typecount = args.filetypecount
+        self.errorhandling = args.disableerrorhandling
+        self.term = args.search
+        self.outfile = args.output
 
-	linecount = args.linecount
-	typecount = args.filetypecount
-	errorhandling = args.disableerrorhandling
-	term = args.search
-	outfile = args.output
+    def main(self):
+        if (((self.i_type is not None) and (self.tosearch is not None)) or
+                self.linecount or self.typecount):
+            if self.errorhandling:
+                self.start()
+            else:
+                try:
+                    self.start()
+                except:
+                    self.printline('[!] An error ocurred:\n')
+                    for e in sys.exc_info():
+                        self.printline(e)
+                    self.printline(
+                        '[*] Note that this script may break on some filetypes'
+                        ' when run with 3.4. Please use 2.7')
 
-	if (((type != None) and (tosearch != None)) or linecount or typecount):
-		if errorhandling:
-			start()
-		else:
-			try:
-				start()
-			except:
-				printline('[!] An error ocurred:\n')
-				for e in sys.exc_info():
-					printline(e)
-				printline('[*] Note that this script may break on some filetypes when run with 3.4. Please use 2.7')
-	elif help != 1:
-			print('USAGE:\tfilecrawler.py [-h, -r, -v, -p, -c, -t, -z, -l, -e <extension(s)>, -o <filename>, -s <searchterm>] -d|-f <directory|filename>')
-			
-def start():
-	global term, term, tosearch, rec, linecount, typecount, types, extfilter, outfile, lockedfiles
-	loc = 0
-	if outfile != None:
-		with open(outfile, 'w') as f:
-				f.write("") 
-	
-	#Print intro messages
-	printline('\n\t\t --TODO--\n')
-	if type == 'd' and rec:
-		printline('[*] Recursively running against directory:\n\t%s' % tosearch)
-	elif type == 'd' and not rec:
-		printline('[*] Non-recursively running against directory:\n\t%s' % tosearch)
-	elif type == 'f':
-		printline('[*] Running against file:\n\t%s' % tosearch)
-	if term != None:
-		printline('[*] Searching for:\n\t%s' % term)
-	if linecount:
-		printline('[*] Performing line count')
-	if typecount and extfilter == None:
-		printline('[*] Enumerating all found file types')
-	if extfilter != None:
-		printline('[*] Filtering against the following file extensions:')
-		for e in extfilter:
-			printline('\t%s' % e)
-	if outfile != None:
-		printline('[*] Output written to file:\n\t%s' % outfile)        
-		
-	#Determine appropriate search
-	printline('\n\t\t--RESULTS--\n')
-	if type == 'd':
-		parsedirectory(tosearch)
-	elif type == 'f':
-		searchfile(tosearch)
-	
-	for i in extlist.keys():
-			loc += extlist.get(i)[1]
+    def start(self):
+        loc = 0
 
-	#Print appropriate results
-	if term != None:
-		printline('\n[*] Search complete. %s lines searched across %s files with %s occurrences found.' % (prettynumbers(loc), prettynumbers(fcount), prettynumbers(rcount)))
-	if linecount:
-		printline('[*] %s lines parsed across %s files' % (prettynumbers(loc), prettynumbers(fcount)))
-	if len(lockedfiles) > 0:
-		printline('\n[!] Unable to open the following files:')
-		for f in lockedfiles:
-			printline('\t%s'%f)
-		printline('\n[*] Note: Hidden files are unable to be opened via Python on Windows; please unhide all files you wish to scan.')
-	if typecount:
-		if extfilter:
-			printline('[*] Number of occurrences of filtered file extensions:')
-		else:
-			printline('[*] %s file types were discovered:' % prettynumbers(len(extlist)))
-		
-		sorted_extlist = extlist.keys()
-		sorted_extlist.sort()
+        # Print intro messages
+        print('\n\t\t --TODO--\n')
+        if self.i_type == 'd' and self.rec:
+            print('[*] Recursively running against directory:\n\t%s' %
+                  self.tosearch)
+        elif self.i_type == 'd' and not self.rec:
+            print('[*] Non-self.recursively running against directory:\n\t%s' %
+                  self.tosearch)
+        elif self.i_type == 'f':
+            print('[*] Running against file:\n\t%s' % self.tosearch)
+        if self.term is not None:
+            print('[*] Searching for:\n\t%s' % self.term)
+        if self.linecount is not None:
+            print('[*] Performing line count')
+        if self.typecount and self.extfilter is None:
+            print('[*] Enumerating all found file types')
+        if self.extfilter is not None:
+            print('[*] Filtering against the following file extensions:')
+            for e in self.extfilter:
+                print('\t%s' % e)
+        if self.outfile is not None:
+            print('[*] Output written to file:\n\t%s' % self.outfile)
 
-		if linecount:
-			printline('\t%s %s %s' % ("Type".ljust(18), "Count".ljust(8), "LoC".ljust(8)))
-			for e in sorted_extlist:
-				printline('\t%s %s %s' % (e.ljust(18), prettynumbers(extlist.get(e)[0]).ljust(8), prettynumbers(extlist.get(e)[1]).ljust(8)))
-		else:
-			printline('\t%s %s' % ("Type".ljust(18), "Count".ljust(8)))
-			for e in sorted_extlist:
-				printline('\t%s %s' % (e.ljust(18), prettynumbers(extlist.get(e)[0]).ljust(8)))
+        # Determine appropriate search
+        self.printline('\n\t\t--RESULTS--\n')
+        if self.i_type == 'd':
+            self.parsedirectory(self.tosearch)
+        elif self.i_type == 'f':
+            self.searchfile(self.tosearch)
+        for i in self.file_stats.keys():
+            loc += self.file_stats.get(i)[1]
 
-		
-def searchfile(file, fext):
-	global term, pr, tosearch, rcount, fcount, lockedfiles, extlist
-	count = 1
-	fcount+=1
-	mObj=None
-	lcount = extlist.get(fext, [1,0])
-	vprint('[?] Searching %s for %s' % (file, term))
-	
-	try:
-		with open(file,'r') as f:
-			for line in f:
-				lcount[1]+=1
-				if case and term:
-					mObj = re.search(term, line, flags=0)
-				elif term:
-					mObj = re.search(term, line, flags=re.IGNORECASE)
+        # Print appropriate results
+        if self.term is not None:
+            self.printline('\n[*] Search complete. %s lines searched across %s'
+                           ' files with %s occurrences found.' %
+                           (self.prettynumbers(loc),
+                            self.prettynumbers(self.fcount),
+                            self.prettynumbers(self.rcount)))
+        if self.linecount:
+            self.printline('[*] %s lines parsed across %s files' %
+                           (self.prettynumbers(loc), self.prettynumbers(self.fcount)))
+        if len(self.lockedfiles) > 0:
+            self.printline('\n[!] Unable to open the following files:')
+            for f in self.lockedfiles:
+                self.printline('\t%s' % f)
+            self.printline(
+                '\n[*] Note: Hidden files are unable to be opened'
+                ' via Python on Windows; please unhide all files you wish to scan.')
+        if self.typecount:
+            if self.extfilter:
+                self.printline(
+                    '[*] Number of occurrences of filtered file extensions:')
+            else:
+                self.printline('[*] %s file types were discovered:' %
+                               self.prettynumbers(len(self.file_stats.keys())))
 
-				if mObj:
-					printline('[*] Line %d in file %s' % (count, file[len(tosearch):]))
-					rcount+=1
-					if pr:
-						if len(line)>200:
-							printline(line.strip(' \t\r\n')[:200] + "...\n")
-						else:
-							printline(line.strip(' \t\r\n') + "\n")
-				count+=1
-	except IOError:
-		lockedfiles.append(file)
-		vprint('[?] IOError thrown opening: %s'%file)
-	
-	extlist[fext] = lcount
-	vprint('[?] Number of lines: %d' % count)
-	
-def searchfiles(files, dir):
-	global extfilter, typelist, term
-	found = False
-	vprint('[?] Searching file list')
-	
-	for file in files:
-		vprint('[?] Parsing file:\t%s'%file)
-		fext = path.splitext(file)[1]   
-		if len(fext) < 1:
-			fext = 'no ext'
-			
-		if typecount and (extfilter == None or fext in extfilter):
-			if fext in extlist.keys():
-				inc = extlist.get(fext)
-				extlist[fext] = [inc[0]+1, inc[1]]
-			else:
-				extlist[fext] = [1,0]
+            ext_list = self.file_stats.keys()
+            ext_list.sort()
 
-		if (term != None or linecount) and (extfilter == None or (extfilter != None and fext in extfilter)):
-			searchfile(dir+'/'+file, fext)
+            if self.linecount:
+                self.printline("\t%s %s %s" %
+                               ("Type".ljust(18), "Count".ljust(8), "LoC".ljust(8)))
+                for e in ext_list:
+                    self.printline('\t%s %s %s' %
+                                   (e.ljust(18),
+                                    self.prettynumbers(self.file_stats.get(e)[0]).ljust(8),
+                                    self.prettynumbers(self.file_stats.get(e)[1]).ljust(8)))
+            else:
+                self.printline("\t%s %s" %
+                               ("Type".ljust(18), "Count".ljust(8)))
+                for e in ext_list:
+                    self.printline('\t%s %s' % (e.ljust(18), self.prettynumbers(
+                        self.file_stats.get(e)[0]).ljust(8)))
 
-def parsedirectory(dir):
-	global rec
-	flist = []
-	dlist = []
-	
-	vprint('[?] Parsing %s' % dir)
-	
-	for (dirpath, dirname, filenames) in walk(dir):
-		flist.extend(filenames)
-		dlist.extend(dirname)
-		break
-		
-	vprint('[?] Files found:')
-	vprint(flist)
-	vprint('[?] Directories found:')
-	vprint(dlist)
+    def searchfile(self, file, fext=None):
+        count = 1
+        self.fcount += 1
+        m_obj = None
+        self.lcount = self.file_stats.get(fext, [1, 0])
 
-	searchfiles(flist, dir)
-	
-	if (rec) & (dlist != []):
-		for d in dlist:
-			parsedirectory(dir+'/'+d)
-			
-def vprint(str):
-	global verbose
-	if verbose:
-		printline(str)
+        self.vprint('[?] Searching %s for %s' % (file, self.term))
 
-def printline(s):
-	print(s)
-	if outfile != None:
-		with open(outfile, 'a') as f:
-			f.write(str(s)+"\n")
-			
-def prettynumbers(str):
-	return "{:,}".format(str)
-	
+        try:
+            with open(file, 'r') as f:
+                lines = f.readlines()
+            if self.term:
+                for line in lines:
+                    self.lcount[1] += 1
+                    if self.case and self.term:
+                        m_obj = re.search(self.term, line, flags=0)
+                    elif self.term:
+                        m_obj = re.search(self.term, line, flags=re.IGNORECASE)
+
+                    if m_obj:
+                        self.printline('[*] Line %d in file %s' %
+                                       (count, file[len(self.tosearch):]))
+                        self.rcount += 1
+                        if self.print_out:
+                            if len(line) > 200:
+                                self.printline(line.strip(
+                                    ' \t\r\n')[:200] + "...\n")
+                            else:
+                                self.printline(line.strip(' \t\r\n') + "\n")
+                    count += 1
+            else:
+                self.lcount[1] += len(lines)
+        except IOError:
+            self.lockedfiles.append(file)
+            self.vprint('[?] IOError thrown opening: %s' % file)
+
+        self.file_stats[fext] = self.lcount
+        self.vprint('[?] Number of lines: %d' % count)
+
+    def get_magic(self, infile):
+        # Attempt to read magic bytes. If in common dict set ext appropriately
+        with open(infile, 'rb') as f:
+            mbytes = f.read(16)
+        for k, v in self.magic_numbers.iteritems():
+            if mbytes.startswith(binascii.unhexlify(v)):
+                return k.upper()
+        self.vprint("[?] Magic Numbers for File: %s\n%s" % (infile, mbytes))
+        return None
+
+    def searchfiles(self, files, i_dir):
+        self.vprint('[?] Searching file list')
+
+        for file in files:
+            self.vprint('[?] Parsing file:\t%s' % file)
+            fext = path.splitext(file)[1]
+            if len(fext) < 1:
+                t_ext = self.get_magic(i_dir + "/" + file)
+                if t_ext is not None:
+                    fext = t_ext
+                else:
+                    fext = 'no ext'
+
+            if self.typecount is not None and (self.extfilter is None or
+                                               fext in self.extfilter):
+                if fext in self.file_stats.keys():
+                    inc = self.file_stats.get(fext)
+                    self.file_stats[fext] = [inc[0] + 1, inc[1]]
+                else:
+                    self.file_stats[fext] = [1, 0]
+
+            if ((self.term is not None or self.linecount) and
+                    (self.extfilter is None or
+                     (self.extfilter is not None and fext in self.extfilter))):
+                self.searchfile(i_dir + '/' + file, fext)
+
+    def parsedirectory(self, i_dir):
+        flist = []
+        dlist = []
+
+        self.vprint('[?] Parsing %s' % i_dir)
+
+        for (_, dirname, filenames) in walk(i_dir):
+            flist.extend(filenames)
+            dlist.extend(dirname)
+            break
+
+        self.vprint('[?] Files found:')
+        self.vprint(flist)
+        self.vprint('[?] Directories found:')
+        self.vprint(dlist)
+
+        self.searchfiles(flist, i_dir)
+
+        if (self.rec) & (dlist != []):
+            for d in dlist:
+                self.parsedirectory(i_dir + '/' + d)
+
+    def vprint(self, o_str):
+        if self.verbose:
+            self.printline(o_str)
+
+    def printline(self, o_str):
+        if self.outfile is not None:
+            with open(self.outfile, 'a') as o_file:
+                o_file.write(str(o_str) + "\n")
+        else:
+            print(o_str)
+
+    @staticmethod
+    def prettynumbers(o_str):
+        return "{:,}".format(o_str)
+
 if __name__ == "__main__":
-	main()
+    f_crawl = FileCrawler()
+    f_crawl.main()
