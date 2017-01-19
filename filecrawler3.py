@@ -1,5 +1,4 @@
 #! python3
-#evenr sourcing, xmpp, homekit
 from os import walk, path
 from collections import OrderedDict
 import sys, getopt, re, argparse, threading, queue, time
@@ -122,8 +121,14 @@ def start():
     threads = [Parser(searchQueue,resultQueue,settings,id) for id in range(settings['numthreads'])]
     [t.start() for t in threads]
 
-    while not checkIfDone(threads):
-        handleResults()
+    try:
+        while not checkIfDone(threads):
+            handleResults()
+    except KeyboardInterrupt:
+        print('exiting early')
+        [t.done = True for t in threads]
+        [t.join() for t in threads]
+        sys.exit(1)
     
     #Print appropriate results
     printline('\n\t\t--RESULTS--\n')
@@ -207,7 +212,7 @@ class Parser(threading.Thread):
     def run(self):
         #print('thread %s running'%self.id)
         while not self.done and not self.searchQueue.empty():
-            tosearch = searchQueue.get()
+            tosearch = self.searchQueue.get()
             self.resultQueue.put(('vprint','[*] thread %s searching: %s'%(self.id,tosearch)))
 
             lcount = 0
