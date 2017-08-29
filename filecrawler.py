@@ -16,6 +16,7 @@ class FileCrawler:
         self.lcount = 0
         self.file_stats = {}
         self.lockedfiles = []
+        self.binaryfiles = []
         self.magic_numbers = {
             "tarz": b'1F9D',
             "tar": b'1FA0',
@@ -170,6 +171,13 @@ class FileCrawler:
             self.printline(
                 '\n[*] Note: Hidden files are unable to be opened'
                 ' via Python on Windows; please unhide all files you wish to scan.')
+        if len(self.binaryfiles) > 0:
+            self.printline('\n[!] Unable to open the following binary files:')
+            for f in self.binaryfiles:
+                self.printline('\t%s' % f)
+            self.printline(
+                '\n[*] Note: This script was written for py2. Opening binary files '
+                'via py3 will cause errors.')
         if self.typecount:
             if self.extfilter:
                 self.printline(
@@ -231,6 +239,9 @@ class FileCrawler:
         except IOError:
             self.lockedfiles.append(file)
             self.vprint('[?] IOError thrown opening: %s' % file)
+        except UnicodeDecodeError:
+            self.binaryfiles.append(file)
+            self.vprint('[?] UnicodeDecodeError thrown opening: %s' % file)
 
         self.file_stats[fext] = self.lcount
         self.vprint('[?] Number of lines: %d' % count)
